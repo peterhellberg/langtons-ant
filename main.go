@@ -2,6 +2,7 @@
 package main
 
 import (
+	"flag"
 	"image"
 	"image/color"
 	"image/draw"
@@ -10,82 +11,35 @@ import (
 	"github.com/nsf/termbox-go"
 )
 
-const (
-	Up    = '▲'
-	Right = '▶'
-	Down  = '▼'
-	Left  = '◀'
-)
-
 var (
 	ant   *Ant
 	board *image.Gray16
+
+	delay = flag.Duration("delay", 33*time.Millisecond, "The delay in the logic loop")
+	right = flag.Bool("right", false, "Right direction at start")
+	left  = flag.Bool("left", false, "Left direction at start")
+	up    = flag.Bool("up", false, "Up direction at start")
+	down  = flag.Bool("down", false, "Down direction at start")
+
+	direction = Down
 )
 
-type Ant struct {
-	X int
-	Y int
-	W int
-	H int
-	D rune
+func setup() (*Ant, *image.Gray16) {
+	w, h := termbox.Size()
+	ant := &Ant{X: w / 2, Y: h / 2, W: w, H: h, D: direction}
+
+	board = image.NewGray16(image.Rect(0, 0, ant.W, ant.H))
+	draw.Draw(board, board.Bounds(), &image.Uniform{color.White}, image.ZP, draw.Src)
+
+	return ant, board
 }
 
-func (a *Ant) OnWhiteSquare() bool {
-	return board.At(a.X, a.Y) == color.White
-}
-
-func (a *Ant) Turn() {
-	if a.OnWhiteSquare() {
-		a.turnRight()
-	} else {
-		a.turnLeft()
-	}
-}
-
-func (a *Ant) turnRight() {
-	switch a.D {
-	case Up:
-		a.D = Right
-	case Right:
-		a.D = Down
-	case Down:
-		a.D = Left
-	case Left:
-		a.D = Up
-	}
-}
-
-func (a *Ant) turnLeft() {
-	switch a.D {
-	case Up:
-		a.D = Left
-	case Left:
-		a.D = Down
-	case Down:
-		a.D = Right
-	case Right:
-		a.D = Up
-	}
-}
-
-func (a *Ant) FlipColor() {
-	if a.OnWhiteSquare() {
-		board.Set(a.X, a.Y, color.Black)
-	} else {
-		board.Set(a.X, a.Y, color.White)
-	}
-}
-
-func (a *Ant) Move() {
-	switch a.D {
-	case Up:
-		a.Y--
-	case Right:
-		a.X++
-	case Down:
-		a.Y++
-	case Left:
-		a.X--
+func logic() {
+	for {
+		ant.Turn()
+		time.Sleep(*delay)
+		ant.FlipColor()
+		ant.Move()
 	}
 }
 
@@ -113,14 +67,24 @@ func render() {
 	termbox.Flush()
 }
 
-func setup() (*Ant, *image.Gray16) {
-	w, h := termbox.Size()
-	ant := &Ant{X: w / 2, Y: h / 2, W: w, H: h, D: Up}
+func init() {
+	flag.Parse()
 
-	board = image.NewGray16(image.Rect(0, 0, ant.W, ant.H))
-	draw.Draw(board, board.Bounds(), &image.Uniform{color.White}, image.ZP, draw.Src)
+	if *up {
+		direction = Up
+	}
 
-	return ant, board
+	if *down {
+		direction = Down
+	}
+
+	if *right {
+		direction = Right
+	}
+
+	if *left {
+		direction = Left
+	}
 }
 
 func main() {
@@ -131,23 +95,14 @@ func main() {
 
 	ant, board = setup()
 
+	go logic()
+
 	events := make(chan termbox.Event)
 	go func() {
 		for {
 			events <- termbox.PollEvent()
 		}
 	}()
-
-	go func() {
-		for {
-			ant.Turn()
-			ant.FlipColor()
-			ant.Move()
-			time.Sleep(33 * time.Millisecond)
-		}
-	}()
-
-	render()
 loop:
 	for {
 		select {
