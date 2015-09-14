@@ -12,8 +12,7 @@ import (
 )
 
 var (
-	ant   *Ant
-	board *image.Gray16
+	ant *Ant
 
 	delay = flag.Duration("delay", 33*time.Millisecond, "The delay in the logic loop")
 	right = flag.Bool("right", false, "Right direction at start")
@@ -23,49 +22,6 @@ var (
 
 	direction = Down
 )
-
-func setup() (*Ant, *image.Gray16) {
-	w, h := termbox.Size()
-	ant := &Ant{X: w / 2, Y: h / 2, W: w, H: h, D: direction}
-
-	board = image.NewGray16(image.Rect(0, 0, ant.W, ant.H))
-	draw.Draw(board, board.Bounds(), &image.Uniform{color.White}, image.ZP, draw.Src)
-
-	return ant, board
-}
-
-func logic() {
-	for {
-		ant.Turn()
-		time.Sleep(*delay)
-		ant.FlipColor()
-		ant.Move()
-	}
-}
-
-func render() {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-
-	for y := 0; y < ant.H; y++ {
-		for x := 0; x < ant.W; x++ {
-			fg := termbox.ColorDefault
-			ch := ' '
-
-			if ant.X == x && ant.Y == y {
-				fg = termbox.ColorRed
-				ch = ant.D
-			}
-
-			if board.At(x, y) == color.Black {
-				termbox.SetCell(x, y, ch, fg, termbox.ColorBlack)
-			} else {
-				termbox.SetCell(x, y, ch, fg, termbox.ColorDefault)
-			}
-		}
-	}
-
-	termbox.Flush()
-}
 
 func init() {
 	flag.Parse()
@@ -87,13 +43,67 @@ func init() {
 	}
 }
 
+func setup() {
+	w, h := termbox.Size()
+
+	board := image.NewGray16(image.Rect(0, 0, w, h))
+	draw.Draw(board, board.Bounds(), &image.Uniform{color.White}, image.ZP, draw.Src)
+
+	ant = &Ant{X: w / 2, Y: h / 2, W: w, H: h, D: direction, B: board}
+}
+
+func logic() {
+	for {
+		ant.Turn()
+		time.Sleep(*delay)
+		ant.FlipColor()
+		ant.Move()
+	}
+}
+
+func render() {
+	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+
+	ant.RLock()
+	antW := ant.W
+	antH := ant.H
+	ant.RUnlock()
+
+	for y := 0; y < antH; y++ {
+		for x := 0; x < antW; x++ {
+			fg := termbox.ColorDefault
+			ch := ' '
+
+			ant.RLock()
+			antX := ant.X
+			antY := ant.Y
+			antD := ant.D
+			antColor := ant.B.At(x, y)
+			ant.RUnlock()
+
+			if antX == x && antY == y {
+				fg = termbox.ColorRed
+				ch = antD
+			}
+
+			if antColor == color.Black {
+				termbox.SetCell(x, y, ch, fg, termbox.ColorBlack)
+			} else {
+				termbox.SetCell(x, y, ch, fg, termbox.ColorDefault)
+			}
+		}
+	}
+
+	termbox.Flush()
+}
+
 func main() {
 	if err := termbox.Init(); err != nil {
 		panic(err)
 	}
 	defer termbox.Close()
 
-	ant, board = setup()
+	setup()
 
 	go logic()
 
@@ -112,7 +122,7 @@ loop:
 			}
 
 			if ev.Type == termbox.EventResize {
-				ant, board = setup()
+				setup()
 			}
 		default:
 			render()
